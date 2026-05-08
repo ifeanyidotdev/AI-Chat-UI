@@ -1,6 +1,14 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback, FormEvent, KeyboardEvent } from "react";
+import { marked } from "marked";
+
+// Configure marked for inline rendering (no wrapping <p> tags for short content)
+marked.setOptions({ breaks: true, gfm: true });
+
+function renderMarkdown(text: string): string {
+  return marked.parse(text, { async: false }) as string;
+}
 
 const API_BASE = "http://localhost:3000/api/v1/advisor";
 
@@ -85,7 +93,7 @@ export default function AdvisorPage() {
   // ── Sync first chunk into DOM after bubble mounts ────────────────────────────
   useEffect(() => {
     if (isStreaming && !isThinking && streamingBubbleRef.current) {
-      streamingBubbleRef.current.textContent = streamingContentRef.current;
+      streamingBubbleRef.current.innerHTML = renderMarkdown(streamingContentRef.current);
     }
   }, [isStreaming, isThinking]);
 
@@ -218,12 +226,16 @@ export default function AdvisorPage() {
         if (done) break;
 
         buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() ?? "";
 
-        for (const line of lines) {
-          if (!line.startsWith("data: ")) continue;
-          const raw = line.slice(6).trim();
+        // SSE events are separated by double newlines (\n\n)
+        const eventBlocks = buffer.split("\n\n");
+        // Last element may be incomplete — keep it in the buffer
+        buffer = eventBlocks.pop() ?? "";
+
+        for (const block of eventBlocks) {
+          const dataLine = block.split("\n").find(l => l.startsWith("data: "));
+          if (!dataLine) continue;
+          const raw = dataLine.slice(6).trim();
           if (!raw) continue;
 
           let event: any;
@@ -238,7 +250,7 @@ export default function AdvisorPage() {
             } else {
               // Subsequent chunks: write directly to DOM, zero React involvement
               if (streamingBubbleRef.current) {
-                streamingBubbleRef.current.textContent = streamingContentRef.current;
+                streamingBubbleRef.current.innerHTML = renderMarkdown(streamingContentRef.current);
               }
             }
 
@@ -387,10 +399,10 @@ export default function AdvisorPage() {
                   <span className="message-role">
                     {msg.role === "user" ? "You" : "Advisor"}
                   </span>
-                  <div className="message-bubble">
-                    {msg.content}
-                    {msg.streaming && <span className="streaming-cursor" />}
-                  </div>
+                  <div
+                    className="message-bubble markdown-body"
+                    dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.content) }}
+                  />
                 </div>
               ))}
 
@@ -409,7 +421,7 @@ export default function AdvisorPage() {
               {isStreaming && !isThinking && (
                 <div className="message assistant">
                   <span className="message-role">Advisor</span>
-                  <div className="message-bubble">
+                  <div className="message-bubble markdown-body">
                     <span ref={streamingBubbleRef}></span>
                     <span className="streaming-cursor" />
                   </div>
