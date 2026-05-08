@@ -10,7 +10,7 @@ function renderMarkdown(text: string): string {
   return marked.parse(text, { async: false }) as string;
 }
 
-const API_BASE = "http://localhost:3000/api/v1/advisor";
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000/api/v1/advisor";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
